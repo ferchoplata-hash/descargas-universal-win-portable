@@ -33,12 +33,19 @@ jobs:
       - name: Install Playwright Chromium (local project path)
         shell: pwsh
         run: |
-          $env:PLAYWRIGHT_BROWSERS_PATH = "0"
+          $env:PLAYWRIGHT_BROWSERS_PATH = "$pwd\ms-playwright"
           python -m playwright install chromium
+          if (-not (Test-Path "ms-playwright")) {
+            throw "No se encontró la carpeta ms-playwright en el workspace."
+          }
+          Write-Host "Playwright browsers path:" $env:PLAYWRIGHT_BROWSERS_PATH
 
       - name: Build executable
         shell: pwsh
         run: |
+          if (-not (Test-Path "ms-playwright")) {
+            throw "ms-playwright no existe antes de PyInstaller."
+          }
           pyinstaller `
             --noconfirm `
             --clean `

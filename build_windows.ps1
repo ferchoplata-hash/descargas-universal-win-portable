@@ -13,7 +13,7 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements-windows.txt pyinstaller
 
 # Instala Chromium dentro del proyecto para poder empacarlo en modo portable.
-$env:PLAYWRIGHT_BROWSERS_PATH = "0"
+$env:PLAYWRIGHT_BROWSERS_PATH = Join-Path $ProjectDir "ms-playwright"
 python -m playwright install chromium
 
 $BrowserDir = Join-Path $ProjectDir "ms-playwright"
