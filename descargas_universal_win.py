@@ -145,13 +145,27 @@ def run_download_month(year: int, month: int, output_root: Path) -> None:
         )
 
     def get_current_result_key(page: Page) -> str:
+        pager = ""
         try:
-            return (page.locator("[id='resultForm:pagText2']").first.inner_text(timeout=1200) or "").strip()
+            pager = (page.locator("[id='resultForm:pagText2']").first.inner_text(timeout=1200) or "").strip()
         except Exception:
-            return ""
+            pager = ""
+        pdf_href = ""
+        try:
+            pdf_href = (page.get_by_role("link", name="Pdf").first.get_attribute("href", timeout=1200) or "").strip()
+        except Exception:
+            pdf_href = ""
+        return f"{pager}|{pdf_href}"
 
     def click_next_result(page: Page) -> bool:
-        for sel in ["[id='resultForm:j_idt217']", "[id$='j_idt217']", ".ui-paginator-next"]:
+        for sel in [
+            "[id='resultForm:j_idt217']",
+            "[id$='j_idt217']",
+            ".ui-paginator-next",
+            "a.ui-paginator-next",
+            "button.ui-paginator-next",
+            "[aria-label*='Next']",
+        ]:
             loc = page.locator(sel).first
             try:
                 if loc.count() == 0:
@@ -163,6 +177,25 @@ def run_download_month(year: int, month: int, output_root: Path) -> None:
                 return True
             except Exception:
                 continue
+        try:
+            clicked = page.evaluate(
+                """() => {
+                    const candidates = Array.from(document.querySelectorAll(
+                        ".ui-paginator-next, a.ui-paginator-next, button.ui-paginator-next, [aria-label*='Next']"
+                    ));
+                    for (const el of candidates) {
+                        const cls = (el.className || "").toString().toLowerCase();
+                        const disabled = el.getAttribute("aria-disabled") === "true" || el.hasAttribute("disabled");
+                        if (disabled || cls.includes("disabled")) continue;
+                        el.click();
+                        return true;
+                    }
+                    return false;
+                }"""
+            )
+            return bool(clicked)
+        except Exception:
+            pass
         return False
 
     def move_next_distinct(page: Page, current_key: str) -> bool:
@@ -173,8 +206,11 @@ def run_download_month(year: int, month: int, output_root: Path) -> None:
                 try:
                     page.wait_for_function(
                         """(prev) => {
-                            const el = document.getElementById('resultForm:pagText2');
-                            return !!el && el.textContent && el.textContent.trim() !== prev;
+                            const pager = (document.getElementById('resultForm:pagText2')?.textContent || '').trim();
+                            const pdf = (Array.from(document.querySelectorAll('a'))
+                                .find(a => (a.textContent || '').trim().toLowerCase() === 'pdf')
+                                ?.getAttribute('href') || '').trim();
+                            return `${pager}|${pdf}` !== prev;
                         }""",
                         arg=current_key,
                         timeout=9000,
