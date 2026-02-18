@@ -285,6 +285,12 @@ def run_download_month(year: int, month: int, output_root: Path) -> None:
             click_if_possible(menu)
 
             saved = save_download(page, context, idx)
+            # Cierra overlays del menú para no bloquear la navegación al siguiente resultado.
+            try:
+                page.keyboard.press("Escape")
+            except Exception:
+                pass
+            click_if_possible(page.locator("body"))
             with log_csv.open("a", newline="", encoding="utf-8") as f:
                 wr = csv.writer(f)
                 if saved:
@@ -295,6 +301,8 @@ def run_download_month(year: int, month: int, output_root: Path) -> None:
                     print(f"[{idx}] Sin descarga PDF disponible.")
                     wr.writerow([idx, "ERROR", "", "Sin PDF o timeout"])
 
+            if total_pos > 0:
+                print(f"Posicion resultado: {current_pos}/{total_pos}")
             if total_pos > 0 and current_pos >= total_pos:
                 print("Ultimo resultado alcanzado. Fin del proceso.")
                 break
