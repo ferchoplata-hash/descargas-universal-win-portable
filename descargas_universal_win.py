@@ -144,18 +144,15 @@ def run_download_month(year: int, month: int, output_root: Path) -> None:
             }"""
         )
 
-    def get_current_result_key(page: Page) -> str:
-        pager = ""
+    def get_current_position(page: Page) -> tuple[int, int]:
         try:
-            pager = (page.locator("[id='resultForm:pagText2']").first.inner_text(timeout=1200) or "").strip()
+            txt = (page.locator("[id='resultForm:pagText2']").first.inner_text(timeout=1500) or "").strip()
         except Exception:
-            pager = ""
-        pdf_href = ""
-        try:
-            pdf_href = (page.get_by_role("link", name="Pdf").first.get_attribute("href", timeout=1200) or "").strip()
-        except Exception:
-            pdf_href = ""
-        return f"{pager}|{pdf_href}"
+            txt = ""
+        m = re.search(r"(\d+)\s*/\s*(\d+)", txt)
+        if not m:
+            return (0, 0)
+        return (int(m.group(1)), int(m.group(2)))
 
     def click_next_result(page: Page) -> bool:
         for sel in [
@@ -198,28 +195,29 @@ def run_download_month(year: int, month: int, output_root: Path) -> None:
             pass
         return False
 
-    def move_next_distinct(page: Page, current_key: str) -> bool:
-        for _ in range(3):
+    def move_next_distinct(page: Page, current_pos: int) -> bool:
+        for _ in range(5):
             if not click_next_result(page):
-                continue
-            if current_key:
                 try:
-                    page.wait_for_function(
-                        """(prev) => {
-                            const pager = (document.getElementById('resultForm:pagText2')?.textContent || '').trim();
-                            const pdf = (Array.from(document.querySelectorAll('a'))
-                                .find(a => (a.textContent || '').trim().toLowerCase() === 'pdf')
-                                ?.getAttribute('href') || '').trim();
-                            return `${pager}|${pdf}` !== prev;
-                        }""",
-                        arg=current_key,
-                        timeout=9000,
-                    )
-                    return True
+                    page.keyboard.press("ArrowRight")
                 except Exception:
                     pass
             try:
-                page.wait_for_timeout(300)
+                page.wait_for_function(
+                    """(prev) => {
+                        const txt = (document.getElementById('resultForm:pagText2')?.textContent || '').trim();
+                        const m = txt.match(/(\\d+)\\s*\\/\\s*(\\d+)/);
+                        if (!m) return false;
+                        return Number(m[1]) > prev;
+                    }""",
+                    arg=current_pos,
+                    timeout=10000,
+                )
+                return True
+            except Exception:
+                pass
+            try:
+                page.wait_for_timeout(500)
             except Exception:
                 pass
         return False
@@ -279,7 +277,7 @@ def run_download_month(year: int, month: int, output_root: Path) -> None:
 
         idx, total_ok = 1, 0
         while True:
-            key = get_current_result_key(page)
+            current_pos, total_pos = get_current_position(page)
             click_if_possible(page.locator("[id='resultForm:jurisTable:0:display']").first)
             menu = page.locator("[id='resultForm:j_idt234_menuButton']").first
             if menu.count() == 0:
@@ -297,12 +295,10 @@ def run_download_month(year: int, month: int, output_root: Path) -> None:
                     print(f"[{idx}] Sin descarga PDF disponible.")
                     wr.writerow([idx, "ERROR", "", "Sin PDF o timeout"])
 
-            pos_txt = get_current_result_key(page)
-            m = re.search(r"(\d+)\s*/\s*(\d+)", pos_txt)
-            if m and int(m.group(1)) >= int(m.group(2)):
+            if total_pos > 0 and current_pos >= total_pos:
                 print("Ultimo resultado alcanzado. Fin del proceso.")
                 break
-            if not move_next_distinct(page, key):
+            if not move_next_distinct(page, current_pos):
                 print("No hay siguiente resultado para continuar.")
                 break
             idx += 1
